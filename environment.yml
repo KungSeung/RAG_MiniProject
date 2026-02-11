@@ -1,0 +1,14 @@
+name: data
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - python-dotenv>=1.0.0
+  - requests
+  - pip
+  - pip:
+    - anthropic>=0.18.0
+    - supabase>=2.0.0
+    - sentence-transformers
+    - openai>=1.0.0
