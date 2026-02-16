@@ -23,7 +23,7 @@ class KakaoLocalCrawler:
     def __init__(self, api_key: str):
         self.api_key = api_key
         self.base_url = "https://dapi.kakao.com/v2/local/search/keyword.json"
-        self.headers = {"Authorization": api_key}
+        self.headers = {"Authorization": f"kakaoAK {api_key}"}
     
         
     def search_places(
