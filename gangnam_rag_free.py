@@ -14,9 +14,25 @@ from sentence_transformers import SentenceTransformer
 from supabase import create_client, Client
 import anthropic
 from dotenv import load_dotenv
+import logging
 
 # .env 파일 로드
 load_dotenv()
+
+# ============================================================
+# 0. 에러핸들링
+# ============================================================
+
+logging.basicConfig(
+    filename="rag_app.log",
+    level=logging.ERROR,
+    format="%(asctime)s [%(levelname)s] %(message)s"
+)
+logger = logging.getLogger(__name__)
+
+# 커스텀 예외 클래스 추가
+class ParseError(Exception):
+    pass
 
 # ============================================================
 # 1. 설정
@@ -309,9 +325,8 @@ def parse_question(user_input: str) -> dict:
         result = json.loads(clean)
         return result
     except Exception as e:
-        print(f"[DEBUG] 파싱 오류: {e}")  # 추가
-        return {"location": None, "limit": 5, "radius": 500}
-
+        logger.error(f"파싱 실패 | input: {user_input} | raw: {raw} | error: {e}")
+        raise ParseError(f"질문 분석 실패: {e}")
 
 # ============================================================
 # 7. AI 응답 생성
@@ -377,17 +392,21 @@ def chat(user_input: str) -> str:
     print(f"\n💬 질문: {user_input}")
     print("=" * 60)
     
-    # 1️⃣ AI가 질문 파싱
+    # 1. AI가 질문 파싱
     print("\n🤖 질문 분석 중...")
-    parsed = parse_question(user_input)
+    try:
+        parsed = parse_question(user_input)
+    except ParseError as e:
+        print(f"⚠️ 질문 분석에 실패했어요. 기본 설정으로 검색합니다.")
+        parsed = {"location": None, "limit": 5, "radius": 500}
     print(f"   → {parsed}")
     
-    # 2️⃣ 벡터 검색 (의미 기반!)
+    # 2. 벡터 검색 (의미 기반!)
     print("\n🔍 벡터 검색 중...")
     places = search_by_vector(user_input, limit=parsed.get("limit", 5) * 3)
     print(f"   → {len(places)}개 후보 발견")
     
-    # 3️⃣ 위치 필터링 (있으면)
+    # 3. 위치 필터링 (있으면)
     if parsed.get("location"):
         coords = get_coordinates(parsed["location"])
         if coords:
@@ -413,7 +432,7 @@ def chat(user_input: str) -> str:
         random.shuffle(top_places)
         places = top_places[:parsed.get("limit", 5)]
     
-    # 4️⃣ AI 응답 생성
+    # 4. AI 응답 생성
     print("\n✍️ 응답 생성 중...")
     response = generate_response(user_input, places)
     
