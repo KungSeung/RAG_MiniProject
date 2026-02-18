@@ -9,6 +9,7 @@ import json
 import os
 import math
 import random
+import time
 import requests
 from sentence_transformers import SentenceTransformer
 from supabase import create_client, Client
@@ -272,25 +273,43 @@ def calc_distance(lat1, lon1, lat2, lon2) -> int:
 # 5. 벡터 검색 (핵심!)
 # ============================================================
 
-def search_by_vector(query: str, limit: int = 20) -> list:
+def search_by_vector(query: str, limit: int = 20, max_retries: int = 3) -> list:
     """
-    벡터 유사도 검색
-    
-    "점심에 혼밥하기 좋은 곳" → 의미적으로 비슷한 장소 반환
+    벡터 유사도 검색 : "점심에 혼밥하기 좋은 곳" → 의미적으로 비슷한 장소 반환
+    타임아웃 + 재시도 포함
     """
     # 질문을 임베딩
     query_embedding = get_embedding(query)
     
     # Supabase RPC 호출
-    result = supabase.rpc(
-        "match_places_vector",
-        {
-            "query_embedding": query_embedding,
-            "match_count": limit
-        }
-    ).execute()
+    for attempt in range(1, max_retries+1):
+        try:
+            result = supabase.rpc(
+                "match_places_vector",
+                {
+                    "query_embedding": query_embedding,
+                    "match_count": limit
+                }
+            ).execute()
+            return result.data
+        except requests.exceptions.Timeout:
+            print(f"Supabase 응답지연 ({attempt}/{max_retries})")
+            if attempt < max_retries:
+                wait = attempt * 2
+                print(f"{wait}초 후 재시도...")
+                time.sleep(wait)
+            else:
+                print("Supabase 연결 시간 초과. 잠시 후 다시 시도해주세요.")
+                return []
+        except requests.exceptions.ConnectionError:
+            print("네트워크 연결 실패. 인터넷 연결을 확인해주세요.")
+            return []
+        except Exception as e:
+            logger.error(f"벡터 검색 실패 | query: {query} | error : {e}")
+            print("검색 중 오류가 발생했어요.")
+            return []
     
-    return result.data
+    return []
 
 
 # ============================================================
