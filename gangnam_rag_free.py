@@ -187,6 +187,7 @@ def store_places_with_tags(data_file: str = "gangnam_places_with_tags.json"):
     
     print(f"📊 총 {len(all_places)}개 장소 임베딩 & 저장 중...")
     
+    records = []    # 배치 처리
     for i, item in enumerate(all_places):
         place = item["place"]
         
@@ -203,7 +204,7 @@ def store_places_with_tags(data_file: str = "gangnam_places_with_tags.json"):
         embedding = get_embedding(full_content)
         
         # Supabase에 저장
-        record = {
+        records.append({
             "place_id": place["id"],
             "name": place["name"],
             "category": place["category"],
@@ -220,12 +221,18 @@ def store_places_with_tags(data_file: str = "gangnam_places_with_tags.json"):
             "vibe": place.get("vibe", []),
             "content": content,
             "embedding": embedding
-        }
-        
-        supabase.table("places").upsert(record, on_conflict="place_id").execute()
+        })
         
         if (i + 1) % 50 == 0 or i == len(all_places) - 1:
             print(f"  [{i+1}/{len(all_places)}] 저장 완료")
+
+    BATCH_SIZE = 50
+    for start in range(0, len(records), BATCH_SIZE):
+        batch = records[start:start+BATCH_SIZE]
+        supabase.table("places").upsert(
+            batch, on_conflict="place_id"
+        ).execute()
+        print(f" [{start+len(batch)/len(records)}] DB 저장 완료")
     
     print("✅ 모든 데이터 저장 완료!")
 
