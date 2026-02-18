@@ -15,6 +15,7 @@ from supabase import create_client, Client
 import anthropic
 from dotenv import load_dotenv
 import logging
+from functools import lru_cache
 
 # .env 파일 로드
 load_dotenv()
@@ -67,12 +68,10 @@ claude = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 # 임베딩 모델 (무료)
 embedding_model = None
 
+@lru_cache(maxsize=1)
 def get_embedding_model():
-    global embedding_model
-    if embedding_model is None:
-        print("🔄 임베딩 모델 로딩 중...")
-        embedding_model = SentenceTransformer('jhgan/ko-sroberta-multitask')
-    return embedding_model
+    print("임베딩 모델 로딩 중...")
+    return SentenceTransformer('jhgan/ko-sroberta-multitask')
 
 def get_embedding(text: str) -> list:
     model = get_embedding_model()
@@ -189,7 +188,7 @@ def store_places_with_tags(data_file: str = "gangnam_places_with_tags.json"):
     
     records = []    # 배치 처리
     for i, item in enumerate(all_places):
-        place = item["place"]
+        place = item["place"  ]
         
         # content가 없으면 기본값 생성
         content = place.get("content", "")
