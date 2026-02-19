@@ -187,22 +187,28 @@ CREATE TABLE places (
 ### 보안
 
 - Kakao API 인증 헤더 형식이 `KakaoAK {key}` 접두사 없이 사용되고 있음
+  -> API 스펙에 맞게 코드 수정완료o
 - API 키가 코드 내에서 직접 참조되며, 추가적인 접근 제어 없음
 
 ### 에러 처리
 
 - `parse_question`에서 Claude 응답 파싱 실패 시 기본값으로 silent fallback 발생
-- Supabase 타임아웃, 카카오 API rate limit 등에 대한 방어 로직 부재
+- Supabase 타임아웃
+  -> 점진적 대기를 통한 타임아웃 처리로 코드 수정완료o
+- 카카오 API rate limit 등에 대한 방어 로직 부재
 - 에러 로깅이 `print`로만 처리되어 프로덕션 디버깅에 부적합
+  -> Logger를 사용한 로그처리로 처리완료o
 
 ### 성능
 
 - `store_places_with_tags`에서 레코드를 1건씩 upsert하여 네트워크 호출 과다
+  -> 배치처리를 통해 50건씩 묶어서 upsert하는 방식 채택
 - 벡터 검색 결과에 similarity threshold가 없어 낮은 유사도 결과가 포함될 수 있음
 
 ### 설계
 
 - 임베딩 모델을 전역 변수 + lazy loading으로 관리하여 전역 상태 오염 가능성 존재
+  -> lru_cache를 통해 모듈을 재사용하고 코드의 간결함 추가.
 - Claude 모델 버전(`claude-sonnet-4-20250514`)이 하드코딩되어 있음
 - 멀티턴 대화 미지원 (매 요청이 독립적)
 
