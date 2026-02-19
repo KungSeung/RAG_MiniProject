@@ -1,143 +1,218 @@
-# 강남 맛집 RAG 시스템 (벡터 검색 버전)
+# Gangnam Restaurant RAG System
 
-자연어로 질문하면 AI가 강남 맛집/카페를 추천해주는 시스템입니다.
+자연어 질문 기반 강남역 맛집 추천 시스템. 벡터 유사도 검색과 위치 기반 필터링을 결합한 RAG(Retrieval-Augmented Generation) 파이프라인.
 
-## 주요 기능
-
-- 🔍 벡터 유사도 검색으로 의미 기반 검색 가능
-- 🤖 Claude AI를 활용한 자연어 질문 파싱
-- 📍 카카오맵 API로 위치 기반 필터링
-- 💬 친절한 AI 응답 생성
-
-## 설치 방법
-
-### 1. 저장소 클론
-
-```bash
-git clone <your-repository-url>
-cd find_rest_byrag
+```
+"한라클래식 근처 점심에 혼밥하기 좋은 곳 3개 추천해줘"
 ```
 
-### 2. 가상 환경 생성 및 활성화
+---
 
-#### 방법 A: Conda 환경 (권장)
+## Overview
+
+일반 LLM에 맛집 추천을 요청하면 폐업한 가게를 추천하거나 존재하지 않는 식당을 생성하는 할루시네이션 문제가 발생한다. 이 프로젝트는 RAG 아키텍처를 적용하여 실제 데이터베이스에서 검색한 결과를 기반으로 응답을 생성함으로써 이 문제를 해결한다.
+
+### 처리 흐름
+
+```
+사용자 질문
+    |
+    v
+[1] Claude API -- 질문 파싱 (위치, 개수, 반경 추출)
+    |
+    v
+[2] ko-sroberta -- 질문을 768차원 벡터로 변환
+    |
+    v
+[3] Supabase pgvector -- 코사인 유사도 기반 검색
+    |
+    v
+[4] Kakao Local API -- 기준 위치 좌표 조회 + Haversine 거리 필터링
+    |
+    v
+[5] Claude API -- 검색 결과 기반 자연어 응답 생성
+```
+
+---
+
+## Tech Stack
+
+| 구분      | 기술                                              |
+| --------- | ------------------------------------------------- |
+| Embedding | `jhgan/ko-sroberta-multitask` (768d, 한국어 특화) |
+| Vector DB | Supabase + pgvector                               |
+| LLM       | Claude API (Anthropic)                            |
+| Geocoding | Kakao Local Search API                            |
+| Language  | Python 3.11                                       |
+
+---
+
+## Project Structure
+
+```
+RAG_MiniProject/
+├── gangnam_rag_free.py          # RAG 파이프라인 메인 코드
+├── kakao_crawl.py               # 카카오 API 기반 맛집 데이터 수집
+├── gangnam_places_with_tags.json # 태그 포함 맛집 데이터
+├── environment.yml              # Conda 환경 설정
+├── requirements.txt             # pip 의존성
+├── .env.example                 # 환경 변수 템플릿
+└── README.md
+```
+
+---
+
+## Setup
+
+### 1. 환경 구성
 
 ```bash
-# 환경 생성
+# Conda
 conda env create -f environment.yml
+conda activate rag
 
-# 환경 활성화
-conda activate data
-```
-
-#### 방법 B: Python venv
-
-```bash
-python -m venv venv
-source venv/bin/activate  # Windows: venv\Scripts\activate
+# 또는 pip
 pip install -r requirements.txt
 ```
 
-### 4. 환경 변수 설정
+### 2. 환경 변수 설정
 
-`.env.example` 파일을 `.env`로 복사하고 API 키를 설정하세요:
+`.env.example`을 복사하여 `.env` 파일을 생성하고 API 키를 입력한다.
 
 ```bash
 cp .env.example .env
 ```
 
-`.env` 파일을 열어서 다음 값들을 입력하세요:
-
 ```env
-SUPABASE_URL=your_supabase_url_here
-SUPABASE_KEY=your_supabase_service_role_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-KAKAO_API_KEY=KakaoAK your_kakao_rest_api_key_here
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-supabase-anon-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
+KAKAO_API_KEY=your-kakao-rest-api-key
 ```
 
-#### API 키 발급 방법
+### 3. 데이터베이스 초기화
 
-- **Supabase**: [https://supabase.com](https://supabase.com) → 프로젝트 생성 → Settings → API
-- **Anthropic Claude**: [https://console.anthropic.com](https://console.anthropic.com) → API Keys
-- **Kakao**: [https://developers.kakao.com](https://developers.kakao.com) → 내 애플리케이션 → REST API 키
-
-## 사용 방법
-
-### 1. Supabase 테이블 설정
+Supabase SQL Editor에서 테이블 생성 SQL을 실행한다.
 
 ```bash
 python gangnam_rag_free.py setup
 ```
 
-출력된 SQL을 복사하여 Supabase SQL Editor에서 실행하세요.
+출력되는 SQL을 Supabase 대시보드의 SQL Editor에 붙여넣고 실행한다. pgvector 확장 활성화, places 테이블 생성, 벡터 검색 함수 등록이 포함되어 있다.
 
-### 2. 데이터 저장
+### 4. 데이터 임베딩 및 저장
 
 ```bash
 python gangnam_rag_free.py store
 ```
 
-### 3. 질문하기
+`gangnam_places_with_tags.json`의 음식점/카페 데이터를 읽어 임베딩을 생성하고 Supabase에 저장한다.
+
+---
+
+## Usage
 
 ```bash
-python gangnam_rag_free.py chat '점심에 혼밥하기 좋은 곳'
-python gangnam_rag_free.py chat '한라클래식 근처 데이트 식당 3개'
-python gangnam_rag_free.py chat '조용한 카페 추천해줘'
+python gangnam_rag_free.py chat '점심에 혼밥하기 좋은 한식 추천해줘'
+python gangnam_rag_free.py chat '데이트하기 좋은 분위기 있는 식당'
+python gangnam_rag_free.py chat '한라클래식 근처 조용한 카페 3개'
 ```
 
-## Git 관리
+---
 
-### .gitignore 설정
+## Architecture Details
 
-`.gitignore` 파일이 자동으로 생성되어 있습니다. 다음 파일들은 Git에 추적되지 않습니다:
+### 벡터 검색
 
-- `.env` (API 키 포함)
-- `__pycache__/`
-- 가상 환경 폴더
-- IDE 설정 파일
+단순 키워드 매칭이 아닌 의미 기반 검색을 수행한다. "혼밥"이라는 단어가 데이터에 없더라도, "1인식 가능", "카운터석", "혼자 와도 편한" 등의 태그와 의미적으로 유사하면 검색 결과에 포함된다.
 
-### Git 저장소 초기화 및 커밋
+각 장소의 content와 태그를 결합하여 임베딩을 생성한다.
 
-```bash
-# Git 저장소 초기화
-git init
-
-# 모든 파일 추가 (.gitignore에 의해 .env는 제외됨)
-git add .
-
-# 첫 커밋
-git commit -m "Initial commit: 강남 맛집 RAG 시스템"
-
-# GitHub 저장소 연결 (저장소 생성 후)
-git remote add origin <your-github-repository-url>
-
-# 푸시
-git push -u origin main
+```python
+tags_text = " ".join(place.get("tags", []))
+full_content = f"{content} {tags_text}"
+embedding = get_embedding(full_content)
 ```
 
-## 프로젝트 구조
+### 하이브리드 필터링
+
+벡터 유사도로 넓게 후보를 확보한 뒤, 위치 조건이 있으면 Haversine 공식으로 거리를 계산하여 반경 내 결과만 필터링한다.
 
 ```
-find_rest_byrag/
-├── .env                          # API 키 (Git에 추적 안 됨)
-├── .env.example                  # 환경 변수 예시
-├── .gitignore                    # Git 제외 파일 목록
-├── README.md                     # 프로젝트 설명
-├── requirements.txt              # pip 패키지 목록
-├── environment.yml               # conda 환경 설정
-├── gangnam_rag_free.py          # 메인 코드
-├── gangnam_places_with_tags.json # 데이터
-└── kakao_crawl.py               # 크롤링 코드
+벡터 검색 (limit * 3배 후보 확보)
+    |
+    v
+위치 조건 존재? -- Yes --> Kakao API로 좌표 조회 --> 반경 필터링
+    |                                                    |
+    No                                                   |
+    |                                                    v
+    +--------------------------<-------------------------+
+    |
+    v
+상위 결과 중 랜덤 셔플 (동일 추천 방지)
+    |
+    v
+최종 N개 반환
 ```
 
-## 보안 주의사항
+### 데이터 스키마
 
-⚠️ **절대로 `.env` 파일을 Git에 커밋하지 마세요!**
+```sql
+CREATE TABLE places (
+    id bigserial PRIMARY KEY,
+    place_id text UNIQUE NOT NULL,
+    name text NOT NULL,
+    category text,
+    place_type text,         -- 'restaurant' | 'cafe'
+    address text,
+    phone text,
+    x text,                  -- 경도
+    y text,                  -- 위도
+    tags text[],             -- ['혼밥', '가성비', '점심특선']
+    meal_time text[],        -- ['점심', '저녁']
+    situation text[],        -- ['데이트', '회식', '혼밥']
+    vibe text[],             -- ['조용한', '모던한', '아늑한']
+    content text,            -- 장소 설명 (임베딩 대상)
+    embedding vector(768),   -- ko-sroberta 임베딩 벡터
+    created_at timestamptz DEFAULT now()
+);
+```
 
-- API 키가 노출되면 악용될 수 있습니다
-- `.gitignore`에 `.env`가 포함되어 있는지 확인하세요
-- 실수로 커밋한 경우 즉시 API 키를 재발급하세요
+---
 
-## 라이선스
+## Known Issues / Improvements
 
-MIT License
+### 보안
+
+- Kakao API 인증 헤더 형식이 `KakaoAK {key}` 접두사 없이 사용되고 있음
+- API 키가 코드 내에서 직접 참조되며, 추가적인 접근 제어 없음
+
+### 에러 처리
+
+- `parse_question`에서 Claude 응답 파싱 실패 시 기본값으로 silent fallback 발생
+- Supabase 타임아웃, 카카오 API rate limit 등에 대한 방어 로직 부재
+- 에러 로깅이 `print`로만 처리되어 프로덕션 디버깅에 부적합
+
+### 성능
+
+- `store_places_with_tags`에서 레코드를 1건씩 upsert하여 네트워크 호출 과다
+- 벡터 검색 결과에 similarity threshold가 없어 낮은 유사도 결과가 포함될 수 있음
+
+### 설계
+
+- 임베딩 모델을 전역 변수 + lazy loading으로 관리하여 전역 상태 오염 가능성 존재
+- Claude 모델 버전(`claude-sonnet-4-20250514`)이 하드코딩되어 있음
+- 멀티턴 대화 미지원 (매 요청이 독립적)
+
+---
+
+## Roadmap
+
+- [ ] 에러 처리 고도화 (타임아웃 재시도, rate limit 대응, 구조화된 로깅)
+- [ ] 배치 upsert 적용으로 데이터 저장 성능 개선
+- [ ] similarity threshold 도입으로 검색 품질 향상
+- [ ] 리뷰 데이터 통합으로 임베딩 정밀도 개선
+- [ ] Streamlit 기반 웹 인터페이스 구축
+- [ ] 멀티턴 대화 지원
+
+---
